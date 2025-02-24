@@ -1,0 +1,60 @@
+name: github-nuget-content-download
+author: Hoi Fong Chan
+description: Download nuget packages from folders
+
+inputs:
+  PackageName:
+    required: true
+  PackageVersion:
+    description: The package version, e.g. 1.2.3-beta.4
+    required: true
+  OutputPath:
+    description: The path to the content directory to be packaged
+    default: artifacts
+    required: false
+  WorkingDirectory:
+    default: nugetcontentdownload
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: pwsh
+      run: |
+        if ([string]::IsNullOrWhiteSpace("${{ inputs.PackageName }}")) {
+          throw "PackageName not specified"
+        }
+
+        if ([string]::IsNullOrWhiteSpace("${{ inputs.PackageVersion }}")) {
+          throw "PackageVersion not specified"
+        }
+
+        if ([string]::IsNullOrWhiteSpace("${{ inputs.OutputPath }}")) {
+          throw "OutputPath not specified"
+        }
+
+        if ([string]::IsNullOrWhiteSpace("${{ inputs.WorkingDirectory }}")) {
+          throw "WorkingDirectory not specified"
+        }
+    - name: Download
+      shell: pwsh
+      run: |
+        $packageName = "${{ inputs.PackageName}}"
+        $version = "${{ inputs.PackageVersion }}"
+        $outputPath = "${{ inputs.OutputPath }}"
+        $workingDirectory = "${{ inputs.WorkingDirectory }}"
+        
+        # "dotnet nuget" doesn't allow for downloading nuget packages directly so we need to create a temporary one
+        mkdir $workingDirectory
+        Push-Location $workingDirectory
+        dotnet new classlib
+        dotnet add package $packageName --version $version
+
+        # The package will now be downloaded into the nuget global cache. We can now copy it to the current directory.
+        $nugetPackagePath = Join-Path (dotnet nuget locals global-packages --list).Split(": ")[1] $packageName.ToLower() $version "content" "content"
+        Pop-Location
+        Copy-Item $nugetPackagePath $outputPath -Recurse
+
+        # Clean up
+        Remove-Item $workingDirectory -Recurse
